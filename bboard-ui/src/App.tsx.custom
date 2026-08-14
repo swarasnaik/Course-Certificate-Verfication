@@ -1,0 +1,222 @@
+import React, { useState } from 'react';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Container,
+  Stack,
+  TextField,
+  Typography,
+  Chip,
+  Alert,
+} from '@mui/material';
+
+export default function App() {
+  const [course, setCourse] = useState('');
+  const [studentId, setStudentId] = useState('');
+  const [result, setResult] = useState('');
+
+  const issueCredential = () => {
+    setResult(
+      `Credential ready for ${studentId || 'student'} — ${course || 'course'}`
+    );
+  };
+
+  const verifyCredential = () => {
+    setResult('Verification request submitted.');
+  };
+
+  const revokeCredential = () => {
+    setResult('Credential revocation request submitted.');
+  };
+
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        background:
+          'linear-gradient(135deg, #07111f 0%, #101827 50%, #172554 100%)',
+        color: 'white',
+        py: 6,
+      }}
+    >
+      <Container maxWidth="lg">
+        <Stack spacing={4}>
+
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 2,
+            }}
+          >
+            <Box>
+              <Typography variant="h3" sx={{ fontWeight: 800 }}>
+                CourseProof
+              </Typography>
+
+              <Typography color="grey.400">
+                Privacy-Preserving Course Completion Verification
+              </Typography>
+            </Box>
+
+            <Chip
+              label="Midnight Network"
+              sx={{ color: 'white' }}
+              variant="outlined"
+            />
+          </Box>
+
+          <Box sx={{ textAlign: 'center', py: 3 }}>
+            <Typography variant="h2" sx={{ fontWeight: 800 }}>
+              Course Completion Verification
+            </Typography>
+
+            <Typography
+              variant="h6"
+              color="grey.400"
+              sx={{ mt: 2 }}
+            >
+              Issue, verify and revoke course credentials
+              while protecting student privacy.
+            </Typography>
+          </Box>
+
+          {result && (
+            <Alert severity="info">
+              {result}
+            </Alert>
+          )}
+
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={3}
+          >
+            <Card sx={{ flex: 1, background: '#111827', color: 'white' }}>
+              <CardContent>
+                <Typography variant="h5" sx={{ fontWeight: 700 }} gutterBottom>
+                  🎓 Issue Credential
+                </Typography>
+
+                <TextField
+                  fullWidth
+                  label="Course Name"
+                  value={course}
+                  onChange={(e) => setCourse(e.target.value)}
+                  margin="normal"
+                  slotProps={{ inputLabel: { sx: { color: '#aaa' } } }}
+                />
+
+                <TextField
+                  fullWidth
+                  label="Student ID"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  margin="normal"
+                  slotProps={{ inputLabel: { sx: { color: '#aaa' } } }}
+                />
+
+                <Button
+                  fullWidth
+                  variant="contained"
+                  sx={{ mt: 2 }}
+                  onClick={issueCredential}
+                >
+                  Issue Credential
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card sx={{ flex: 1, background: '#111827', color: 'white' }}>
+              <CardContent>
+                <Typography variant="h5" sx={{ fontWeight: 700 }} gutterBottom>
+                  🔐 Verify Credential
+                </Typography>
+
+                <TextField
+                  fullWidth
+                  label="Course Name"
+                  margin="normal"
+                  slotProps={{ inputLabel: { sx: { color: '#aaa' } } }}
+                />
+
+                <TextField
+                  fullWidth
+                  label="Student ID"
+                  margin="normal"
+                  slotProps={{ inputLabel: { sx: { color: '#aaa' } } }}
+                />
+
+                <TextField
+                  fullWidth
+                  label="Credential Salt"
+                  placeholder="64 hexadecimal characters"
+                  margin="normal"
+                  slotProps={{ inputLabel: { sx: { color: '#aaa' } } }}
+                />
+
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  sx={{
+                    mt: 2,
+                    color: 'white',
+                    borderColor: '#64748b',
+                  }}
+                  onClick={verifyCredential}
+                >
+                  Verify Credential
+                </Button>
+              </CardContent>
+            </Card>
+          </Stack>
+
+          <Card sx={{ background: '#0f172a', color: 'white' }}>
+            <CardContent>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                ⚙️ Credential Management
+              </Typography>
+
+              <Typography color="grey.400" sx={{ mt: 1 }}>
+                Manage course completion credentials.
+              </Typography>
+
+              <Button
+                variant="contained"
+                sx={{ mt: 3, mr: 2 }}
+                onClick={issueCredential}
+              >
+                Issue
+              </Button>
+
+              <Button
+                variant="outlined"
+                sx={{ mt: 3, mr: 2, color: 'white', borderColor: '#64748b' }}
+                onClick={verifyCredential}
+              >
+                Verify
+              </Button>
+
+              <Button
+                variant="outlined"
+                color="error"
+                sx={{ mt: 3 }}
+                onClick={revokeCredential}
+              >
+                Revoke
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Typography align="center" color="grey.500">
+            CourseProof • Midnight Network • Privacy by Design
+          </Typography>
+
+        </Stack>
+      </Container>
+    </Box>
+  );
+}

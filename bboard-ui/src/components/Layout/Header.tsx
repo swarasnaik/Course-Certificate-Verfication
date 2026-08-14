@@ -17,7 +17,7 @@ import React from 'react';
 import { AppBar, Box } from '@mui/material';
 
 /**
- * A simple application level header for the bulletin board application.
+ * A simple application level header for the course completion credential application.
  */
 export const Header: React.FC = () => (
   <AppBar

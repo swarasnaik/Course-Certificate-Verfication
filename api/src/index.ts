@@ -14,107 +14,140 @@
 // limitations under the License.
 
 /**
- * Provides types and utilities for working with bulletin board contracts.
+ * Provides types and utilities for working with course completion credential contracts.
  *
  * @packageDocumentation
  */
 
-import * as BBoard from '../../contract/src/managed/bboard/contract/index.js';
+import * as CourseCredential from '../../contract/src/managed/course-credential/contract/index.js';
 
 import { type ContractAddress, convertFieldToBytes } from '@midnight-ntwrk/midnight-js-protocol/compact-runtime';
 import { type Logger } from 'pino';
 import {
-  type BBoardDerivedState,
-  type BBoardContract,
-  type BBoardProviders,
-  type DeployedBBoardContract,
-  bboardPrivateStateKey,
+  type CourseCredentialDerivedState,
+  type CourseCredentialContract,
+  type CourseCredentialProviders,
+  type DeployedCourseCredentialContract,
+  courseCredentialPrivateStateKey,
 } from './common-types.js';
-import { CompiledBBoardContractContract } from '../../contract/src/index';
+import { CompiledCourseCredentialContractContract } from '../../contract/src/index';
 import * as utils from './utils/index.js';
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { combineLatest, map, tap, from, type Observable } from 'rxjs';
 import { toHex } from '@midnight-ntwrk/midnight-js-utils';
-import { BBoardPrivateState, createBBoardPrivateState } from '../../contract/src/witnesses.js';
+import { CourseCredentialPrivateState, createCourseCredentialPrivateState } from '../../contract/src/witnesses.js';
 
 /** @internal */
 
 /**
- * An API for a deployed bulletin board.
+ * The result of verifying a course completion credential.
+ *
+ * @remarks
+ * The `'valid'` variant reports the course that was successfully verified, while the
+ * `'invalid'` variants describe the reason the credential could not be verified so
+ * that a verifier can give helpful feedback. Note that none of these variants ever
+ * disclose the student identifier itself; it remains only in the verifier's local
+ * memory after being revealed by the student.
  */
-export interface DeployedBBoardAPI {
-  readonly deployedContractAddress: ContractAddress;
-  readonly state$: Observable<BBoardDerivedState>;
+export type CourseCredentialVerificationResult =
+  | { readonly valid: true; readonly course: string }
+  | { readonly valid: false; readonly reason: CredentialVerificationFailureReason };
 
-  post: (message: string) => Promise<void>;
-  takeDown: () => Promise<void>;
+/**
+ * The reasons a course completion credential can fail verification.
+ */
+export type CredentialVerificationFailureReason = 'no-active-credential' | 'course-mismatch' | 'commitment-mismatch';
+
+/**
+ * An API for a deployed course completion credential.
+ */
+export interface DeployedCourseCredentialAPI {
+  readonly deployedContractAddress: ContractAddress;
+  readonly state$: Observable<CourseCredentialDerivedState>;
+
+  issueCredential: (course: string, studentIdentifier: string) => Promise<{ salt: Uint8Array }>;
+  revokeCredential: () => Promise<void>;
+  verifyCredential: (
+    course: string,
+    studentIdentifier: string,
+    salt: Uint8Array | string,
+  ) => Promise<CourseCredentialVerificationResult>;
 }
 
 /**
- * Provides an implementation of {@link DeployedBBoardAPI} by adapting a deployed bulletin board
- * contract.
+ * Provides an implementation of {@link DeployedCourseCredentialAPI} by adapting a deployed course
+ * completion credential contract.
  *
  * @remarks
- * The `BBoardPrivateState` is managed at the DApp level by a private state provider. As such, this
- * private state is shared between all instances of {@link BBoardAPI}, and their underlying deployed
- * contracts. The private state defines a `'secretKey'` property that effectively identifies the current
- * user, and is used to determine if the current user is the owner of the message as the observable
- * contract state changes.
+ * The `CourseCredentialPrivateState` is managed at the DApp level by a private state provider. As such,
+ * this private state is shared between all instances of {@link CourseCredentialAPI}, and their underlying
+ * deployed contracts. The private state defines a `'secretKey'` property that effectively identifies the
+ * current user, and is used to determine if the current user is the issuer of the credential as the
+ * observable contract state changes.
  *
  * In the future, Midnight.js will provide a private state provider that supports private state storage
  * keyed by contract address. This will remove the current workaround of sharing private state across
- * the deployed bulletin board contracts, and allows for a unique secret key to be generated for each bulletin
- * board that the user interacts with.
+ * the deployed course credential contracts, and allows for a unique secret key to be generated for each
+ * course credential that the user interacts with.
  */
-// TODO: Update BBoardAPI to use contract level private state storage.
-export class BBoardAPI implements DeployedBBoardAPI {
+// TODO: Update CourseCredentialAPI to use contract level private state storage.
+export class CourseCredentialAPI implements DeployedCourseCredentialAPI {
   /** @internal */
   private constructor(
-    public readonly deployedContract: DeployedBBoardContract,
-    providers: BBoardProviders,
+    public readonly deployedContract: DeployedCourseCredentialContract,
+    providers: CourseCredentialProviders,
     private readonly logger?: Logger,
   ) {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
+    this.providers = providers;
     providers.privateStateProvider.setContractAddress(this.deployedContractAddress);
     this.state$ = combineLatest(
       [
         // Combine public (ledger) state with...
         providers.publicDataProvider.contractStateObservable(this.deployedContractAddress, { type: 'latest' }).pipe(
-          map((contractState) => BBoard.ledger(contractState.data)),
+          map((contractState) => CourseCredential.ledger(contractState.data)),
           tap((ledgerState) =>
             logger?.trace({
               ledgerStateChanged: {
                 ledgerState: {
                   ...ledgerState,
-                  state: ledgerState.state === BBoard.State.OCCUPIED ? 'occupied' : 'vacant',
-                  owner: toHex(ledgerState.owner),
+                  state: ledgerState.state === CourseCredential.State.ISSUED ? 'issued' : 'vacant',
+                  issuer: toHex(ledgerState.issuer),
+                  studentCommitment: ledgerState.studentCommitment.is_some
+                    ? toHex(ledgerState.studentCommitment.value)
+                    : 'none',
                 },
               },
             }),
           ),
         ),
         // ...private state...
-        //    since the private state of the bulletin board application never changes, we can query the
+        //    since the private state of the course credential application never changes, we can query the
         //    private state once and always use the same value with `combineLatest`. In applications
         //    where the private state is expected to change, we would need to make this an `Observable`.
-        from(providers.privateStateProvider.get(bboardPrivateStateKey) as Promise<BBoardPrivateState>),
+        from(
+          providers.privateStateProvider.get(courseCredentialPrivateStateKey) as Promise<CourseCredentialPrivateState>,
+        ),
       ],
       // ...and combine them to produce the required derived state.
       (ledgerState, privateState) => {
-        const hashedSecretKey = BBoard.pureCircuits.publicKey(
+        const hashedSecretKey = CourseCredential.pureCircuits.publicKey(
           privateState.secretKey,
           convertFieldToBytes(32, ledgerState.sequence, 'api/src/index.ts'),
         );
 
         return {
           state: ledgerState.state,
-          message: ledgerState.message.value,
+          course: ledgerState.course.is_some ? ledgerState.course.value : undefined,
+          studentCommitment: ledgerState.studentCommitment.is_some ? ledgerState.studentCommitment.value : undefined,
           sequence: ledgerState.sequence,
-          isOwner: toHex(ledgerState.owner) === toHex(hashedSecretKey),
+          isIssuer: toHex(ledgerState.issuer) === toHex(hashedSecretKey),
         };
       },
     );
   }
+
+  private readonly providers: CourseCredentialProviders;
 
   /**
    * Gets the address of the current deployed contract.
@@ -125,24 +158,68 @@ export class BBoardAPI implements DeployedBBoardAPI {
    * Gets an observable stream of state changes based on the current public (ledger),
    * and private state data.
    */
-  readonly state$: Observable<BBoardDerivedState>;
+  readonly state$: Observable<CourseCredentialDerivedState>;
 
   /**
-   * Attempts to post a given message to the bulletin board.
+   * Attempts to issue a course completion credential.
    *
-   * @param message The message to post.
+   * @param course The name of the course that was completed.
+   * @param studentIdentifier A private identifier of the student (e.g. a name, email or ID).
+   *
+   * @returns A `Promise` that resolves with a randomly generated `salt` that, together with
+   * `studentIdentifier`, must be handed to the student so they can later prove the credential
+   * to a verifier.
    *
    * @remarks
-   * This method can fail during local circuit execution if the bulletin board is currently occupied.
+   * The `studentIdentifier` is never written to the ledger. It is hashed (SHA-256) and then
+   * committed on-chain together with a randomly generated `salt` that this method returns.
+   * This method can fail during local circuit execution if a credential is currently active.
    */
-  async post(message: string): Promise<void> {
-    this.logger?.info(`postingMessage: ${message}`);
+  async issueCredential(course: string, studentIdentifier: string): Promise<{ salt: Uint8Array }> {
+    const normalizedCourse = course.trim();
+    const normalizedStudentId = studentIdentifier.trim();
+    const salt = utils.randomBytes(32);
+    const studentIdBytes = await utils.hashToBytes32(normalizedStudentId);
 
-    const txData = await this.deployedContract.callTx.post(message);
+    console.log('DEBUG: issueCredential start for course:', normalizedCourse);
+    console.log('DEBUG: student identifier hashed to 32 bytes (masked):', toHex(studentIdBytes).slice(0, 10) + '...');
+    console.log('DEBUG: salt generated (32 bytes hex):', toHex(salt));
+    this.logger?.info(`issuingCredentialForCourse: ${normalizedCourse}`);
+
+    const txData = await this.deployedContract.callTx.issueCredential(
+      normalizedCourse,
+      studentIdBytes,
+      salt,
+    );
+
+    console.log('DEBUG: issueCredential tx submitted:', txData.public.txHash);
+    this.logger?.trace({
+      transactionAdded: {
+        circuit: 'issueCredential',
+        txHash: txData.public.txHash,
+        blockHeight: txData.public.blockHeight,
+      },
+    });
+
+    return { salt };
+  }
+
+  /**
+   * Attempts to revoke any currently issued course completion credential.
+   *
+   * @remarks
+   * This method can fail during local circuit execution if no credential is currently active,
+   * or if the currently issued credential wasn't issued by the issuer computed from the current
+   * private state.
+   */
+  async revokeCredential(): Promise<void> {
+    this.logger?.info('revokingCredential');
+
+    const txData = await this.deployedContract.callTx.revokeCredential();
 
     this.logger?.trace({
       transactionAdded: {
-        circuit: 'post',
+        circuit: 'revokeCredential',
         txHash: txData.public.txHash,
         blockHeight: txData.public.blockHeight,
       },
@@ -150,92 +227,141 @@ export class BBoardAPI implements DeployedBBoardAPI {
   }
 
   /**
-   * Attempts to take down any currently posted message on the bulletin board.
+   * Attempts to verify that a student completed a given course.
+   *
+   * @param course The name of the course the student claims to have completed.
+   * @param studentIdentifier The private identifier revealed by the student.
+   * @param salt The salt that the issuer generated (and handed to the student) when the
+   * credential was issued, passed as a `Uint8Array` or hex string.
+   *
+   * @returns A `Promise` that resolves with a {@link CourseCredentialVerificationResult}.
    *
    * @remarks
-   * This method can fail during local circuit execution if the bulletin board is currently vacant,
-   * or if the currently posted message isn't owned by the owner computed from the current private
-   * state.
+   * Verification is performed locally against the on-chain commitment; no transaction is
+   * submitted and nothing is written to the ledger. The commitment stored on-chain is
+   * recomputed from `studentIdentifier` and `salt` using the contract's own `commit` pure
+   * circuit, and compared with the on-chain value. The identifier therefore never needs to
+   * be stored on the ledger to be verified.
    */
-  async takeDown(): Promise<void> {
-    this.logger?.info('takingDownMessage');
+  async verifyCredential(
+    course: string,
+    studentIdentifier: string,
+    salt: Uint8Array | string,
+  ): Promise<CourseCredentialVerificationResult> {
+    const normalizedCourse = course.trim();
+    const normalizedStudentId = studentIdentifier.trim();
 
-    const txData = await this.deployedContract.callTx.takeDown();
+    let saltBytes: Uint8Array;
+    if (typeof salt === 'string') {
+      saltBytes = utils.hexToBytes32(salt);
+    } else if (salt instanceof Uint8Array && salt.length === 32) {
+      saltBytes = salt;
+    } else {
+      saltBytes = utils.hexToBytes32(toHex(salt));
+    }
 
-    this.logger?.trace({
-      transactionAdded: {
-        circuit: 'takeDown',
-        txHash: txData.public.txHash,
-        blockHeight: txData.public.blockHeight,
-      },
-    });
+    console.log('DEBUG: verifyCredential start for course:', normalizedCourse);
+    this.logger?.info(`verifyingCredentialForCourse: ${normalizedCourse}`);
+
+    const contractState = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (contractState === null) {
+      console.log('DEBUG: verifyCredential failed - contract state is null');
+      return { valid: false, reason: 'no-active-credential' };
+    }
+
+    const ledgerState = CourseCredential.ledger(contractState.data);
+    if (ledgerState.state !== CourseCredential.State.ISSUED) {
+      console.log('DEBUG: verifyCredential failed - ledger state is not ISSUED');
+      return { valid: false, reason: 'no-active-credential' };
+    }
+    if (ledgerState.course.value.trim() !== normalizedCourse) {
+      console.log(
+        `DEBUG: verifyCredential failed - course mismatch. On-chain: '${ledgerState.course.value}', Claimed: '${normalizedCourse}'`,
+      );
+      return { valid: false, reason: 'course-mismatch' };
+    }
+
+    const studentId = await utils.hashToBytes32(normalizedStudentId);
+    const computedCommitment = CourseCredential.pureCircuits.commit(studentId, saltBytes);
+    if (toHex(computedCommitment) !== toHex(ledgerState.studentCommitment.value)) {
+      console.log('DEBUG: verifyCredential failed - commitment mismatch');
+      return { valid: false, reason: 'commitment-mismatch' };
+    }
+
+    console.log('DEBUG: verifyCredential succeeded for course:', ledgerState.course.value);
+    return { valid: true, course: ledgerState.course.value };
   }
 
   /**
-   * Deploys a new bulletin board contract to the network.
+   * Deploys a new course completion credential contract to the network.
    *
-   * @param providers The bulletin board providers.
+   * @param providers The course credential providers.
    * @param logger An optional 'pino' logger to use for logging.
-   * @returns A `Promise` that resolves with a {@link BBoardAPI} instance that manages the newly deployed
-   * {@link DeployedBBoardContract}; or rejects with a deployment error.
+   * @returns A `Promise` that resolves with a {@link CourseCredentialAPI} instance that manages the newly
+   * deployed {@link DeployedCourseCredentialContract}; or rejects with a deployment error.
    */
-  static async deploy(providers: BBoardProviders, logger?: Logger): Promise<BBoardAPI> {
+  static async deploy(providers: CourseCredentialProviders, logger?: Logger): Promise<CourseCredentialAPI> {
     logger?.info('deployContract');
 
-    const deployedBBoardContract = await deployContract(providers, {
-      compiledContract: CompiledBBoardContractContract,
-      privateStateId: bboardPrivateStateKey,
-      initialPrivateState: createBBoardPrivateState(utils.randomBytes(32)),
+    const deployedCourseCredentialContract = await deployContract(providers, {
+      compiledContract: CompiledCourseCredentialContractContract,
+      privateStateId: courseCredentialPrivateStateKey,
+      initialPrivateState: createCourseCredentialPrivateState(utils.randomBytes(32)),
     });
 
     logger?.trace({
       contractDeployed: {
-        finalizedDeployTxData: deployedBBoardContract.deployTxData.public,
+        finalizedDeployTxData: deployedCourseCredentialContract.deployTxData.public,
       },
     });
 
-    return new BBoardAPI(deployedBBoardContract, providers, logger);
+    return new CourseCredentialAPI(deployedCourseCredentialContract, providers, logger);
   }
 
   /**
-   * Finds an already deployed bulletin board contract on the network, and joins it.
+   * Finds an already deployed course completion credential contract on the network, and joins it.
    *
-   * @param providers The bulletin board providers.
-   * @param contractAddress The contract address of the deployed bulletin board contract to search for and join.
+   * @param providers The course credential providers.
+   * @param contractAddress The contract address of the deployed course credential contract to search
+   * for and join.
    * @param logger An optional 'pino' logger to use for logging.
-   * @returns A `Promise` that resolves with a {@link BBoardAPI} instance that manages the joined
-   * {@link DeployedBBoardContract}; or rejects with an error.
+   * @returns A `Promise` that resolves with a {@link CourseCredentialAPI} instance that manages the
+   * joined {@link DeployedCourseCredentialContract}; or rejects with an error.
    */
-  static async join(providers: BBoardProviders, contractAddress: ContractAddress, logger?: Logger): Promise<BBoardAPI> {
+  static async join(
+    providers: CourseCredentialProviders,
+    contractAddress: ContractAddress,
+    logger?: Logger,
+  ): Promise<CourseCredentialAPI> {
     logger?.info({
       joinContract: {
         contractAddress,
       },
     });
 
-    const deployedBBoardContract = await findDeployedContract<BBoardContract>(providers, {
+    const deployedCourseCredentialContract = await findDeployedContract<CourseCredentialContract>(providers, {
       contractAddress,
-      compiledContract: CompiledBBoardContractContract,
-      privateStateId: bboardPrivateStateKey,
-      initialPrivateState: await BBoardAPI.getPrivateState(providers, contractAddress),
+      compiledContract: CompiledCourseCredentialContractContract,
+      privateStateId: courseCredentialPrivateStateKey,
+      initialPrivateState: await CourseCredentialAPI.getPrivateState(providers, contractAddress),
     });
 
     logger?.trace({
       contractJoined: {
-        finalizedDeployTxData: deployedBBoardContract.deployTxData.public,
+        finalizedDeployTxData: deployedCourseCredentialContract.deployTxData.public,
       },
     });
 
-    return new BBoardAPI(deployedBBoardContract, providers, logger);
+    return new CourseCredentialAPI(deployedCourseCredentialContract, providers, logger);
   }
 
   private static async getPrivateState(
-    providers: BBoardProviders,
+    providers: CourseCredentialProviders,
     contractAddress: ContractAddress,
-  ): Promise<BBoardPrivateState> {
+  ): Promise<CourseCredentialPrivateState> {
     providers.privateStateProvider.setContractAddress(contractAddress);
-    const existingPrivateState = await providers.privateStateProvider.get(bboardPrivateStateKey);
-    return existingPrivateState ?? createBBoardPrivateState(utils.randomBytes(32));
+    const existingPrivateState = await providers.privateStateProvider.get(courseCredentialPrivateStateKey);
+    return existingPrivateState ?? createCourseCredentialPrivateState(utils.randomBytes(32));
   }
 }
 

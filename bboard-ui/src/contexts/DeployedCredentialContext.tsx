@@ -14,28 +14,34 @@
 // limitations under the License.
 
 import React, { type PropsWithChildren, createContext } from 'react';
-import { type DeployedBoardAPIProvider, BrowserDeployedBoardManager } from './BrowserDeployedBoardManager';
+import {
+  type DeployedCredentialAPIProvider,
+  BrowserDeployedCredentialManager,
+} from './BrowserDeployedCredentialManager';
 import { type Logger } from 'pino';
 
 /**
- * Encapsulates a deployed boards provider as a context object.
+ * Encapsulates a deployed credentials provider as a context object.
  */
-export const DeployedBoardContext = createContext<DeployedBoardAPIProvider | undefined>(undefined);
+export const DeployedCredentialContext = createContext<DeployedCredentialAPIProvider | undefined>(undefined);
 
 /**
- * The props required by the {@link DeployedBoardProvider} component.
+ * The props required by the {@link DeployedCredentialProvider} component.
  */
-export type DeployedBoardProviderProps = PropsWithChildren<{
+export type DeployedCredentialProviderProps = PropsWithChildren<{
   /** The `pino` logger to use. */
   logger: Logger;
 }>;
 
 /**
- * A React component that sets a new {@link BrowserDeployedBoardManager} object as the currently
- * in-scope deployed board provider.
+ * A React component that sets a new {@link BrowserDeployedCredentialManager} object as the currently
+ * in-scope deployed credential provider.
  */
-export const DeployedBoardProvider: React.FC<Readonly<DeployedBoardProviderProps>> = ({ logger, children }) => (
-  <DeployedBoardContext.Provider value={new BrowserDeployedBoardManager(logger)}>
+export const DeployedCredentialProvider: React.FC<Readonly<DeployedCredentialProviderProps>> = ({
+  logger,
+  children,
+}) => (
+  <DeployedCredentialContext.Provider value={new BrowserDeployedCredentialManager(logger)}>
     {children}
-  </DeployedBoardContext.Provider>
+  </DeployedCredentialContext.Provider>
 );

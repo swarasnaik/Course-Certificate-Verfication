@@ -25,18 +25,18 @@ import {
   Contract,
   type Ledger,
   ledger,
-} from "../managed/bboard/contract/index.js";
-import { type BBoardPrivateState, witnesses } from "../witnesses.js";
+} from "../managed/course-credential/contract/index.js";
+import { type CourseCredentialPrivateState, witnesses } from "../witnesses.js";
 
 /**
  * Serves as a testbed to exercise the contract in tests
  */
-export class BBoardSimulator {
-  readonly contract: Contract<BBoardPrivateState>;
-  circuitContext: CircuitContext<BBoardPrivateState>;
+export class CourseCredentialSimulator {
+  readonly contract: Contract<CourseCredentialPrivateState>;
+  circuitContext: CircuitContext<CourseCredentialPrivateState>;
 
   constructor(secretKey: Uint8Array) {
-    this.contract = new Contract<BBoardPrivateState>(witnesses);
+    this.contract = new Contract<CourseCredentialPrivateState>(witnesses);
     const {
       currentPrivateState,
       currentContractState,
@@ -70,31 +70,43 @@ export class BBoardSimulator {
     return ledger(this.circuitContext.currentQueryContext.state);
   }
 
-  public getPrivateState(): BBoardPrivateState {
+  public getPrivateState(): CourseCredentialPrivateState {
     return this.circuitContext.currentPrivateState;
   }
 
-  public post(message: string): Ledger {
+  public issueCredential(
+    course: string,
+    studentId: Uint8Array,
+    salt: Uint8Array,
+  ): Ledger {
     // Update the current context to be the result of executing the circuit.
-    this.circuitContext = this.contract.impureCircuits.post(
+    this.circuitContext = this.contract.impureCircuits.issueCredential(
       this.circuitContext,
-      message,
+      course,
+      studentId,
+      salt,
     ).context;
     return ledger(this.circuitContext.currentQueryContext.state);
   }
 
-  public takeDown(): Ledger {
-    this.circuitContext = this.contract.impureCircuits.takeDown(
+  public revokeCredential(): string {
+    const { context, result } = this.contract.impureCircuits.revokeCredential(
       this.circuitContext,
-    ).context;
-    return ledger(this.circuitContext.currentQueryContext.state);
+    );
+    this.circuitContext = context;
+    return result;
+  }
+
+  public commit(studentId: Uint8Array, salt: Uint8Array): Uint8Array {
+    return this.contract.circuits.commit(this.circuitContext, studentId, salt)
+      .result;
   }
 
   public publicKey(): Uint8Array {
     const sequence = convertFieldToBytes(
       32,
       this.getLedger().sequence,
-      "bboard-simulator.ts",
+      "course-credential-simulator.ts",
     );
     return this.contract.circuits.publicKey(
       this.circuitContext,

@@ -1,56 +1,38 @@
-// This file is part of midnightntwrk/example-bboard.
-// Copyright (C) Midnight Foundation
-// SPDX-License-Identifier: Apache-2.0
-// Licensed under the Apache License, Version 2.0 (the "License");
-// You may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-/**
- * A Single Page Application (SPA) for connecting to and managing deployed
- * bulletin boards.
- *
- * @packageDocumentation
- */
 import './globals';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ThemeProvider } from '@mui/material';
-import { setNetworkId, NetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import App from './App';
 import CssBaseline from '@mui/material/CssBaseline';
-import { theme } from './config/theme';
-import '@midnight-ntwrk/dapp-connector-api';
 import * as pino from 'pino';
-import { DeployedBoardProvider } from './contexts';
+import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 
-const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
-// contract address: 0200dbf964f541e1950883f5b2f539b66fd6111e46ce8e6e9551fbdd180114d5dd5b
-// Ensure that the network IDs are set within the Midnight libraries.
+import App from './App';
+import { theme } from './config/theme';
+import { DeployedCredentialProvider } from './contexts';
+
+const networkId = 'preview';
+console.log('FORCED NETWORK:', networkId);
+
+if (!networkId) {
+  throw new Error('VITE_NETWORK_ID is not configured');
+}
+
 setNetworkId(networkId);
 
-// Create a default `pino` logger and configure it with the configured logging level.
-export const logger = pino.pino({
-  level: import.meta.env.VITE_LOGGING_LEVEL as string,
+const logger = pino.pino({
+  level: import.meta.env.VITE_LOGGING_LEVEL || 'info',
 });
 
-logger.trace(`networkId = ${networkId}`);
-
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+ReactDOM.createRoot(
+  document.getElementById('root') as HTMLElement,
+).render(
   <React.StrictMode>
-    <CssBaseline />
     <ThemeProvider theme={theme}>
-      <DeployedBoardProvider logger={logger}>
+      <CssBaseline />
+      <DeployedCredentialProvider logger={logger}>
         <App />
-      </DeployedBoardProvider>
+      </DeployedCredentialProvider>
     </ThemeProvider>
   </React.StrictMode>,
 );

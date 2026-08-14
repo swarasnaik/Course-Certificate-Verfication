@@ -30,3 +30,42 @@ export const randomBytes = (length: number): Uint8Array => {
   crypto.getRandomValues(bytes);
   return bytes;
 };
+
+/**
+ * Hashes an arbitrary string into a `Bytes<32>` value using SHA-256.
+ *
+ * @remarks
+ * Compact's `persistentCommit` cannot hash opaque JavaScript strings directly, so
+ * the student identifier is reduced to 32 bytes here (in the DApp layer) before it
+ * is committed to on-chain. SHA-256 is available both in Node.js (global `crypto`)
+ * and in browsers (Web Crypto API), so this helper works from the CLI and the UI.
+ *
+ * @param value The value to hash.
+ * @returns A `Promise` that resolves to the 32-byte SHA-256 digest of `value`.
+ */
+export const hashToBytes32 = async (value: string): Promise<Uint8Array> => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value.trim()));
+  return new Uint8Array(digest);
+};
+
+/**
+ * Converts a 64-character hex string (with or without '0x' prefix) into a 32-byte `Uint8Array`.
+ *
+ * @param hex The hexadecimal string to parse.
+ * @returns A `Uint8Array` of length exactly 32.
+ * @throws `Error` if the hex string is not a valid 32-byte representation.
+ */
+export const hexToBytes32 = (hex: string): Uint8Array => {
+  const sanitized = hex.trim().replace(/^0x/i, '');
+  if (!/^[0-9a-fA-F]{64}$/.test(sanitized)) {
+    throw new Error(
+      `Invalid salt: expected 64 hexadecimal characters (32 bytes), received '${hex.trim()}' (${sanitized.length} valid hex chars)`,
+    );
+  }
+  const bytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    bytes[i] = parseInt(sanitized.substring(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+};
+

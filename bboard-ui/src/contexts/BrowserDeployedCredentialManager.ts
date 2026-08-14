@@ -14,12 +14,13 @@
 // limitations under the License.
 
 import {
-  BBoardAPI,
-  type BBoardCircuitKeys,
-  type BBoardProviders,
-  type DeployedBBoardAPI,
+  CourseCredentialAPI,
+  type CourseCredentialCircuitKeys,
+  type CourseCredentialProviders,
+  type DeployedCourseCredentialAPI,
 } from '../../../api/src/index';
-import { type ContractAddress, fromHex, toHex } from '@midnight-ntwrk/midnight-js-protocol/compact-runtime';
+import { type ContractAddress } from '@midnight-ntwrk/midnight-js-protocol/compact-runtime';
+import { fromHex, toHex } from '@midnight-ntwrk/midnight-js-utils';
 import {
   BehaviorSubject,
   catchError,
@@ -49,34 +50,35 @@ import {
   Transaction,
   TransactionId,
 } from '@midnight-ntwrk/midnight-js-protocol/ledger';
-import { BBoardPrivateState } from '@midnight-ntwrk/bboard-contract';
+import type { CourseCredentialPrivateState } from '@midnight-ntwrk/bboard-contract';
 import { inMemoryPrivateStateProvider } from '../in-memory-private-state-provider';
 import { NetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import type { UnboundTransaction } from '@midnight-ntwrk/midnight-js-types';
 
 /**
- * An in-progress bulletin board deployment.
+ * An in-progress course completion credential deployment.
  */
-export interface InProgressBoardDeployment {
+export interface InProgressCredentialDeployment {
   readonly status: 'in-progress';
 }
 
 /**
- * A deployed bulletin board deployment.
+ * A deployed course completion credential deployment.
  */
-export interface DeployedBoardDeployment {
+export interface DeployedCredentialDeployment {
   readonly status: 'deployed';
 
   /**
-   * The {@link DeployedBBoardAPI} instance when connected to an on network bulletin board contract.
+   * The {@link DeployedCourseCredentialAPI} instance when connected to an on network course
+   * completion credential contract.
    */
-  readonly api: DeployedBBoardAPI;
+  readonly api: DeployedCourseCredentialAPI;
 }
 
 /**
- * A failed bulletin board deployment.
+ * A failed course completion credential deployment.
  */
-export interface FailedBoardDeployment {
+export interface FailedCredentialDeployment {
   readonly status: 'failed';
 
   /**
@@ -86,64 +88,66 @@ export interface FailedBoardDeployment {
 }
 
 /**
- * A bulletin board deployment.
+ * A course completion credential deployment.
  */
-export type BoardDeployment = InProgressBoardDeployment | DeployedBoardDeployment | FailedBoardDeployment;
+export type CredentialDeployment =
+  InProgressCredentialDeployment | DeployedCredentialDeployment | FailedCredentialDeployment;
 
 /**
- * Provides access to bulletin board deployments.
+ * Provides access to course completion credential deployments.
  */
-export interface DeployedBoardAPIProvider {
+export interface DeployedCredentialAPIProvider {
   /**
-   * Gets the observable set of board deployments.
+   * Gets the observable set of credential deployments.
    *
    * @remarks
-   * This property represents an observable array of {@link BoardDeployment}, each also an
-   * observable. Changes to the array will be emitted as boards are resolved (deployed or joined),
-   * while changes to each underlying board can be observed via each item in the array.
+   * This property represents an observable array of {@link CredentialDeployment}, each also an
+   * observable. Changes to the array will be emitted as credentials are resolved (deployed or
+   * joined), while changes to each underlying credential can be observed via each item in the array.
    */
-  readonly boardDeployments$: Observable<Array<Observable<BoardDeployment>>>;
+  readonly credentialDeployments$: Observable<Array<Observable<CredentialDeployment>>>;
 
   /**
-   * Joins or deploys a bulletin board contract.
+   * Joins or deploys a course completion credential contract.
    *
    * @param contractAddress An optional contract address to use when resolving.
-   * @returns An observable board deployment.
+   * @returns An observable credential deployment.
    *
    * @remarks
-   * For a given `contractAddress`, the method will attempt to find and join the identified bulletin board
-   * contract; otherwise it will attempt to deploy a new one.
+   * For a given `contractAddress`, the method will attempt to find and join the identified course
+   * completion credential contract; otherwise it will attempt to deploy a new one.
    */
-  readonly resolve: (contractAddress?: ContractAddress) => Observable<BoardDeployment>;
+  readonly resolve: (contractAddress?: ContractAddress) => Observable<CredentialDeployment>;
 }
 
 /**
- * A {@link DeployedBoardAPIProvider} that manages bulletin board deployments in a browser setting.
+ * A {@link DeployedCredentialAPIProvider} that manages course completion credential deployments in a
+ * browser setting.
  *
  * @remarks
- * {@link BrowserDeployedBoardManager} configures and manages a connection to the Midnight Lace
+ * {@link BrowserDeployedCredentialManager} configures and manages a connection to the Midnight Lace
  * wallet, along with a collection of additional providers that work in a web-browser setting.
  */
-export class BrowserDeployedBoardManager implements DeployedBoardAPIProvider {
-  readonly #boardDeploymentsSubject: BehaviorSubject<Array<BehaviorSubject<BoardDeployment>>>;
-  #initializedProviders: Promise<BBoardProviders> | undefined;
+export class BrowserDeployedCredentialManager implements DeployedCredentialAPIProvider {
+  readonly #credentialDeploymentsSubject: BehaviorSubject<Array<BehaviorSubject<CredentialDeployment>>>;
+  #initializedProviders: Promise<CourseCredentialProviders> | undefined;
 
   /**
-   * Initializes a new {@link BrowserDeployedBoardManager} instance.
+   * Initializes a new {@link BrowserDeployedCredentialManager} instance.
    *
    * @param logger The `pino` logger to for logging.
    */
   constructor(private readonly logger: Logger) {
-    this.#boardDeploymentsSubject = new BehaviorSubject<Array<BehaviorSubject<BoardDeployment>>>([]);
-    this.boardDeployments$ = this.#boardDeploymentsSubject;
+    this.#credentialDeploymentsSubject = new BehaviorSubject<Array<BehaviorSubject<CredentialDeployment>>>([]);
+    this.credentialDeployments$ = this.#credentialDeploymentsSubject;
   }
 
   /** @inheritdoc */
-  readonly boardDeployments$: Observable<Array<Observable<BoardDeployment>>>;
+  readonly credentialDeployments$: Observable<Array<Observable<CredentialDeployment>>>;
 
   /** @inheritdoc */
-  resolve(contractAddress?: ContractAddress): Observable<BoardDeployment> {
-    const deployments = this.#boardDeploymentsSubject.value;
+  resolve(contractAddress?: ContractAddress): Observable<CredentialDeployment> {
+    const deployments = this.#credentialDeploymentsSubject.value;
     let deployment = deployments.find(
       (deployment) =>
         deployment.value.status === 'deployed' && deployment.value.api.deployedContractAddress === contractAddress,
@@ -153,7 +157,7 @@ export class BrowserDeployedBoardManager implements DeployedBoardAPIProvider {
       return deployment;
     }
 
-    deployment = new BehaviorSubject<BoardDeployment>({
+    deployment = new BehaviorSubject<CredentialDeployment>({
       status: 'in-progress',
     });
 
@@ -163,12 +167,12 @@ export class BrowserDeployedBoardManager implements DeployedBoardAPIProvider {
       void this.deployDeployment(deployment);
     }
 
-    this.#boardDeploymentsSubject.next([...deployments, deployment]);
+    this.#credentialDeploymentsSubject.next([...deployments, deployment]);
 
     return deployment;
   }
 
-  private getProviders(): Promise<BBoardProviders> {
+  private getProviders(): Promise<CourseCredentialProviders> {
     // We use a cached `Promise` to hold the providers. This will:
     //
     // 1. Cache and re-use the providers (including the configured connector API), and
@@ -178,16 +182,19 @@ export class BrowserDeployedBoardManager implements DeployedBoardAPIProvider {
     return this.#initializedProviders ?? (this.#initializedProviders = initializeProviders(this.logger));
   }
 
-  private async deployDeployment(deployment: BehaviorSubject<BoardDeployment>): Promise<void> {
+  private async deployDeployment(deployment: BehaviorSubject<CredentialDeployment>): Promise<void> {
     try {
       const providers = await this.getProviders();
-      const api = await BBoardAPI.deploy(providers, this.logger);
+      console.log('DEBUG: Starting contract deployment on Preview network...');
+      const api = await CourseCredentialAPI.deploy(providers, this.logger);
+      console.log('DEBUG: Contract deployment finalized successfully! Address:', api.deployedContractAddress);
 
       deployment.next({
         status: 'deployed',
         api,
       });
     } catch (error: unknown) {
+      console.error('DEBUG: Contract deployment failed:', error);
       deployment.next({
         status: 'failed',
         error: error instanceof Error ? error : new Error(String(error)),
@@ -196,18 +203,21 @@ export class BrowserDeployedBoardManager implements DeployedBoardAPIProvider {
   }
 
   private async joinDeployment(
-    deployment: BehaviorSubject<BoardDeployment>,
+    deployment: BehaviorSubject<CredentialDeployment>,
     contractAddress: ContractAddress,
   ): Promise<void> {
     try {
       const providers = await this.getProviders();
-      const api = await BBoardAPI.join(providers, contractAddress, this.logger);
+      console.log('DEBUG: Joining contract at address:', contractAddress);
+      const api = await CourseCredentialAPI.join(providers, contractAddress, this.logger);
+      console.log('DEBUG: Contract joined successfully! Address:', api.deployedContractAddress);
 
       deployment.next({
         status: 'deployed',
         api,
       });
     } catch (error: unknown) {
+      console.error('DEBUG: Joining contract failed:', error);
       deployment.next({
         status: 'failed',
         error: error instanceof Error ? error : new Error(String(error)),
@@ -217,16 +227,27 @@ export class BrowserDeployedBoardManager implements DeployedBoardAPIProvider {
 }
 
 /** @internal */
-const initializeProviders = async (logger: Logger): Promise<BBoardProviders> => {
-  const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
-  const connectedAPI = await connectToWallet(logger, networkId);
-  const zkConfigPath = window.location.origin; // '../../../contract/src/managed/bboard';
-  const keyMaterialProvider = new FetchZkConfigProvider<BBoardCircuitKeys>(zkConfigPath, fetch.bind(window));
+const initializeProviders = async (logger: Logger): Promise<CourseCredentialProviders> => {
+  console.log('DEBUG: Initializing providers for Preview network...');
+  const networkId: NetworkId = 'preview';
+  console.log('DEBUG: Wallet network set to:', networkId);
+  const connectedAPI = await connectToWallet(logger, 'preview');
+  const zkConfigPath = window.location.origin;
+  const keyMaterialProvider = new FetchZkConfigProvider<CourseCredentialCircuitKeys>(zkConfigPath, fetch.bind(window));
   const config = await connectedAPI.getConfiguration();
-  const inMemoryBBoardPrivateStateProvider = inMemoryPrivateStateProvider<string, BBoardPrivateState>();
+  console.log('DEBUG: Connected wallet configuration:', {
+    networkId: config.networkId,
+    indexerUri: config.indexerUri?.split('?')[0],
+    proverServerUri: config.proverServerUri,
+    substrateNodeUri: config.substrateNodeUri,
+  });
+  const inMemoryCourseCredentialPrivateStateProvider = inMemoryPrivateStateProvider<
+    string,
+    CourseCredentialPrivateState
+  >();
   const shieldedAddresses = await connectedAPI.getShieldedAddresses();
   return {
-    privateStateProvider: inMemoryBBoardPrivateStateProvider,
+    privateStateProvider: inMemoryCourseCredentialPrivateStateProvider,
     zkConfigProvider: keyMaterialProvider,
     proofProvider: httpClientProofProvider(config.proverServerUri!, keyMaterialProvider),
     publicDataProvider: indexerPublicDataProvider(config.indexerUri, config.indexerWsUri),
@@ -304,7 +325,7 @@ const connectToWallet = (logger: Logger, networkId: string): Promise<ConnectedAP
           }),
       }),
       concatMap(async (initialAPI) => {
-        const connectedAPI = await initialAPI.connect(networkId);
+        console.log('CONNECTING TO NETWORK:', networkId); const connectedAPI = await initialAPI.connect(networkId);
         const connectionStatus = await connectedAPI.getConnectionStatus();
         logger.info(connectionStatus, 'Wallet connector API enabled status');
         return connectedAPI;

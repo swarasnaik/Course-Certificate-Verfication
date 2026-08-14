@@ -13,5 +13,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export type { BoardDeployment, DeployedBoardAPIProvider } from './BrowserDeployedBoardManager';
-export * from './DeployedBoardContext';
+export type { CredentialDeployment, DeployedCredentialAPIProvider } from './BrowserDeployedCredentialManager';
+export * from './DeployedCredentialContext';
