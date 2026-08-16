@@ -21,12 +21,10 @@ if (!networkId) {
 setNetworkId(networkId);
 
 const logger = pino.pino({
-  level: import.meta.env.VITE_LOGGING_LEVEL || 'info',
+  level: (import.meta.env.VITE_LOGGING_LEVEL as string | undefined) || 'info',
 });
 
-ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement,
-).render(
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />

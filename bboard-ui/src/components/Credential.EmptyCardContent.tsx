@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import { type ContractAddress } from '@midnight-ntwrk/midnight-js-protocol/compact-runtime';
-import {
-  Box,
-  Button,
-  CardContent,
-  Typography,
-} from '@mui/material';
+import { Box, Button, CardContent, Typography } from '@mui/material';
 import CreateCredentialIcon from '@mui/icons-material/AddCircleOutlined';
 import JoinCredentialIcon from '@mui/icons-material/AddLinkOutlined';
 import { TextPromptDialog } from './TextPromptDialog';
@@ -15,9 +10,7 @@ export interface EmptyCardContentProps {
   onJoinCredentialCallback: (contractAddress: ContractAddress) => void;
 }
 
-export const EmptyCardContent: React.FC<
-  Readonly<EmptyCardContentProps>
-> = ({
+export const EmptyCardContent: React.FC<Readonly<EmptyCardContentProps>> = ({
   onCreateCredentialCallback,
   onJoinCredentialCallback,
 }) => {
@@ -33,8 +26,7 @@ export const EmptyCardContent: React.FC<
           justifyContent: 'center',
           alignItems: 'center',
           textAlign: 'center',
-          background:
-            'linear-gradient(145deg, #0f172a 0%, #172554 100%)',
+          background: 'linear-gradient(145deg, #0f172a 0%, #172554 100%)',
           color: 'white',
           borderRadius: 2,
           p: 3,
@@ -52,15 +44,10 @@ export const EmptyCardContent: React.FC<
             mb: 2,
           }}
         >
-          <CreateCredentialIcon
-            sx={{ fontSize: 38, color: '#60a5fa' }}
-          />
+          <CreateCredentialIcon sx={{ fontSize: 38, color: '#60a5fa' }} />
         </Box>
 
-        <Typography
-          variant="h6"
-          sx={{ fontWeight: 700, mb: 1 }}
-        >
+        <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
           Course Credential
         </Typography>
 
@@ -72,8 +59,7 @@ export const EmptyCardContent: React.FC<
             mb: 3,
           }}
         >
-          Create a new credential or connect to an existing
-          course credential.
+          Create a new credential or connect to an existing course credential.
         </Typography>
 
         <Box

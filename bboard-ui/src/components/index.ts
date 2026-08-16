@@ -15,3 +15,4 @@
 
 export * from './Layout';
 export * from './Credential';
+export * from './Wallet';

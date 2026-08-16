@@ -186,11 +186,7 @@ export class CourseCredentialAPI implements DeployedCourseCredentialAPI {
     console.log('DEBUG: salt generated (32 bytes hex):', toHex(salt));
     this.logger?.info(`issuingCredentialForCourse: ${normalizedCourse}`);
 
-    const txData = await this.deployedContract.callTx.issueCredential(
-      normalizedCourse,
-      studentIdBytes,
-      salt,
-    );
+    const txData = await this.deployedContract.callTx.issueCredential(normalizedCourse, studentIdBytes, salt);
 
     console.log('DEBUG: issueCredential tx submitted:', txData.public.txHash);
     this.logger?.trace({

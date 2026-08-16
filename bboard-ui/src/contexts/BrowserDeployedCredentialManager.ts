@@ -23,8 +23,6 @@ import { type ContractAddress } from '@midnight-ntwrk/midnight-js-protocol/compa
 import { fromHex, toHex } from '@midnight-ntwrk/midnight-js-utils';
 import {
   BehaviorSubject,
-  catchError,
-  concatMap,
   filter,
   firstValueFrom,
   interval,
@@ -37,7 +35,7 @@ import {
 } from 'rxjs';
 import { pipe as fnPipe } from 'fp-ts/function';
 import { type Logger } from 'pino';
-import { ConnectedAPI, type InitialAPI } from '@midnight-ntwrk/dapp-connector-api';
+import { ConnectedAPI, ErrorCodes, type APIError, type InitialAPI } from '@midnight-ntwrk/dapp-connector-api';
 import { FetchZkConfigProvider } from '@midnight-ntwrk/midnight-js-fetch-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
@@ -231,7 +229,7 @@ const initializeProviders = async (logger: Logger): Promise<CourseCredentialProv
   console.log('DEBUG: Initializing providers for Preview network...');
   const networkId: NetworkId = 'preview';
   console.log('DEBUG: Wallet network set to:', networkId);
-  const connectedAPI = await connectToWallet(logger, 'preview');
+  const connectedAPI = await connectWallet(logger, 'preview');
   const zkConfigPath = window.location.origin;
   const keyMaterialProvider = new FetchZkConfigProvider<CourseCredentialCircuitKeys>(zkConfigPath, fetch.bind(window));
   const config = await connectedAPI.getConfiguration();
@@ -245,7 +243,7 @@ const initializeProviders = async (logger: Logger): Promise<CourseCredentialProv
     string,
     CourseCredentialPrivateState
   >();
-  const shieldedAddresses = await connectedAPI.getShieldedAddresses();
+  const shieldedAddresses = connectedShieldedAddresses ?? (await connectedAPI.getShieldedAddresses());
   return {
     privateStateProvider: inMemoryCourseCredentialPrivateStateProvider,
     zkConfigProvider: keyMaterialProvider,
@@ -301,9 +299,36 @@ const getFirstCompatibleWallet = (): InitialAPI | undefined => {
 
 const COMPATIBLE_CONNECTOR_API_VERSION = '4.x';
 
+/** The network id this application is configured for. */
+const NETWORK_ID: NetworkId = 'preview';
+
+/**
+ * The state of the connection to the Midnight wallet, published for the connection UI.
+ */
+export interface WalletConnectionState {
+  readonly status: 'disconnected' | 'connecting' | 'connected' | 'error';
+  readonly networkId?: string;
+  readonly address?: string;
+  readonly connectorName?: string;
+  readonly errorMessage?: string;
+}
+
+const walletConnectionSubject: BehaviorSubject<WalletConnectionState> = new BehaviorSubject<WalletConnectionState>({
+  status: 'disconnected',
+});
+
+/**
+ * An observable stream of {@link WalletConnectionState} updates, consumed by the wallet connection
+ * UI to display the connected wallet address and any connection errors.
+ */
+export const walletConnection$: Observable<WalletConnectionState> = walletConnectionSubject;
+
+let connectedAPI: ConnectedAPI | undefined;
+let connectedShieldedAddresses: Awaited<ReturnType<ConnectedAPI['getShieldedAddresses']>> | undefined;
+
 /** @internal */
-const connectToWallet = (logger: Logger, networkId: string): Promise<ConnectedAPI> => {
-  return firstValueFrom(
+const waitForWalletConnector = (logger: Logger): Promise<InitialAPI> =>
+  firstValueFrom(
     fnPipe(
       interval(100),
       map(() => getFirstCompatibleWallet()),
@@ -316,7 +341,7 @@ const connectToWallet = (logger: Logger, networkId: string): Promise<ConnectedAP
       }),
       take(1),
       timeout({
-        first: 1_000,
+        first: 30_000,
         with: () =>
           throwError(() => {
             logger.error('Could not find wallet connector API');
@@ -324,29 +349,92 @@ const connectToWallet = (logger: Logger, networkId: string): Promise<ConnectedAP
             return new Error('Could not find Midnight Lace wallet. Extension installed?');
           }),
       }),
-      concatMap(async (initialAPI) => {
-        console.log('CONNECTING TO NETWORK:', networkId); const connectedAPI = await initialAPI.connect(networkId);
-        const connectionStatus = await connectedAPI.getConnectionStatus();
-        logger.info(connectionStatus, 'Wallet connector API enabled status');
-        return connectedAPI;
-      }),
-      timeout({
-        first: 5_000,
-        with: () =>
-          throwError(() => {
-            logger.error('Wallet connector API has failed to respond');
-
-            return new Error('Midnight Lace wallet has failed to respond. Extension enabled?');
-          }),
-      }),
-      catchError((error, apis) =>
-        error
-          ? throwError(() => {
-              logger.error('Unable to enable connector API' + error);
-              return new Error('Application is not authorized');
-            })
-          : apis,
-      ),
     ),
   );
+
+/** @internal */
+const describeWalletError = (error: unknown): Error => {
+  if (typeof error === 'object' && error !== null && (error as { type?: string }).type === 'DAppConnectorAPIError') {
+    const apiError = error as APIError;
+    if (apiError.code === ErrorCodes.Rejected || apiError.code === ErrorCodes.PermissionRejected) {
+      return new Error(
+        'Wallet authorization was not granted. Please approve this application in your Midnight wallet and try again.',
+      );
+    }
+    return new Error(apiError.reason || apiError.message);
+  }
+  return error instanceof Error ? error : new Error(String(error));
+};
+
+/**
+ * Connects to the Midnight wallet on the configured network, requesting the user's authorization
+ * in the wallet when required.
+ *
+ * @remarks
+ * The connection is cached and shared with the credential providers, so that contract deploys and
+ * joins reuse an existing authorization instead of prompting the wallet again.
+ *
+ * @param logger The `pino` logger to use.
+ * @param networkId The network id to connect the wallet to; defaults to the configured network.
+ * @returns The connected wallet API, once the user has authorized the application.
+ * @throws An actionable error if the connector is missing, authorization is rejected, or the wallet
+ * is connected to a different network.
+ */
+export const connectWallet = (logger: Logger, networkId: string = NETWORK_ID): Promise<ConnectedAPI> => {
+  if (connectedAPI) {
+    return Promise.resolve(connectedAPI);
+  }
+
+  walletConnectionSubject.next({ status: 'connecting', networkId });
+
+  return (async () => {
+    try {
+      const connectorAPI = await waitForWalletConnector(logger);
+      console.log('CONNECTING TO NETWORK:', networkId);
+      const walletAPI = await connectorAPI.connect(networkId);
+      const connectionStatus = await walletAPI.getConnectionStatus();
+      logger.info(connectionStatus, 'Wallet connector API enabled status');
+
+      if (connectionStatus.status !== 'connected' || connectionStatus.networkId !== networkId) {
+        throw new Error(
+          `Midnight wallet is connected to ${
+            connectionStatus.status === 'connected' ? connectionStatus.networkId : 'no network'
+          }; this application requires ${networkId}. Select ${networkId} in your Midnight wallet and try again.`,
+        );
+      }
+
+      const shieldedAddresses = await walletAPI.getShieldedAddresses();
+      connectedAPI = walletAPI;
+      connectedShieldedAddresses = shieldedAddresses;
+      walletConnectionSubject.next({
+        status: 'connected',
+        networkId,
+        address: shieldedAddresses.shieldedAddress,
+        connectorName: connectorAPI.name,
+      });
+      logger.info({ connectorName: connectorAPI.name, networkId }, 'Wallet connected');
+
+      return walletAPI;
+    } catch (error: unknown) {
+      connectedAPI = undefined;
+      connectedShieldedAddresses = undefined;
+      const friendlyError = describeWalletError(error);
+      logger.error({ error: friendlyError }, 'Unable to connect to wallet');
+      walletConnectionSubject.next({
+        status: 'error',
+        networkId,
+        errorMessage: friendlyError.message,
+      });
+      throw friendlyError;
+    }
+  })();
+};
+
+/**
+ * Drops the application-side connection to the Midnight wallet.
+ */
+export const disconnectWallet = (): void => {
+  connectedAPI = undefined;
+  connectedShieldedAddresses = undefined;
+  walletConnectionSubject.next({ status: 'disconnected' });
 };

@@ -68,4 +68,3 @@ export const hexToBytes32 = (hex: string): Uint8Array => {
   }
   return bytes;
 };
-

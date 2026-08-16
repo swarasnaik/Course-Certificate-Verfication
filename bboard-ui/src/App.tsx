@@ -1,4 +1,3 @@
-
 // This file is part of midnightntwrk/example-bboard.
 // Copyright (C) Midnight Foundation
 // SPDX-License-Identifier: Apache-2.0
@@ -16,7 +15,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
-import { MainLayout, Credential } from './components';
+import { MainLayout, Credential, Wallet } from './components';
 import { useDeployedCredentialContext } from './hooks';
 import { type CredentialDeployment } from './contexts';
 import { type Observable } from 'rxjs';
@@ -45,6 +44,7 @@ const App: React.FC = () => {
   return (
     <Box sx={{ background: '#000', minHeight: '100vh' }}>
       <MainLayout>
+        <Wallet />
         {credentialDeployments.map((credentialDeployment, idx) => (
           <div data-testid={`credential-${idx}`} key={`credential-${idx}`}>
             <Credential credentialDeployment$={credentialDeployment} />
@@ -59,8 +59,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-
-
-
-
