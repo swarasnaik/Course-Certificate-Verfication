@@ -65,6 +65,7 @@ If Docker is not found: [Install Docker Desktop](https://docs.docker.com/desktop
 
 For the web interface, install the official Lace wallet extension on [Chrome Store](https://chromewebstore.google.com/detail/lace/gafhhkghbfjjkeiendhlofajokpaflmk) or the [Edge Store](https://microsoftedge.microsoft.com/addons/detail/lace/efeiemlfnahiidnjglmehaihacglceia) (tested with version 1.36.0).
 
+
 After installing, set up the Midnight wallet:
 
 1. Create a **new wallet** — Midnight will appear as a network option
@@ -166,6 +167,8 @@ Your wallet seed is: [64-character hex string]
 Using unshielded address: mn_addr_preprod1hdvtst70zfgd8wvh7l8ppp7mcrxnjn56wc5hlxpwflz3fxdykaesrw0ln4 waiting for funds...
 ```
 
+![alt text](<Screenshot 2026-08-16 172521.png>)
+
 #### Fund Your Wallet
 
 Before deploying contracts, you need testnet tokens.
@@ -190,6 +193,8 @@ Expected output when deploying:
 ```
 Deployed contract at address: [contract address]
 ```
+
+![alt text](<screenshots/Screenshot 2026-08-16 172647.png>)
 
 #### Issue a Credential
 
